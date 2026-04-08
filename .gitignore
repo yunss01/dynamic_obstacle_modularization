@@ -1,0 +1,14 @@
+build/
+devel/
+install/
+log/
+__pycache__/
+camera.bag.zip
+camera.bag/
+src/camera_perception_pkg/camera_perception_pkg/lib/Collected_Datasets/
+*.zip
+build/
+devel/
+install/
+log/
+__pycache__/
