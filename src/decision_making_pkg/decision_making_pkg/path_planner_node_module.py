@@ -18,11 +18,19 @@ class PathPlannerConfig:
         # --- [Vehicle Parameters] ---
         # x: 이미지 상에서 차량 앞/뒤 범퍼 중심 픽셀 x좌표
         # y: 자동 계산 (target y 최댓값 + car_center_y_margin)
-        self.car_center_x_1 = 350   # 전방 카메라 기준 차량 중심 x
-        self.car_center_x_2 = 350   # 후방 카메라 기준 차량 중심 x
+        # 전진할 때 오른쪽으로 붙이고 싶으면 이걸 더 작게
+        self.car_center_x_1 = 280   # 전방 카메라 기준 차량 중심 x
+        # 후진할 때 오른쪽으로 붙이고 싶으면 이걸 더 크게
+        self.car_center_x_2 = 390   # 후방 카메라 기준 차량 중심 x
 
         # target y 최댓값에 더할 여유값 (너무 크면 경로가 급격히 꺾임, 20~40 권장)
         self.car_center_y_margin = 30
+
+        # --- [Lateral Bias] ---
+        # 실선에 붙는 현상 보정용 오프셋 (target_x에 더해짐)
+        # 안 쓰니까 수정하지 마
+        self.lateral_bias_1 = 0    # 전방 카메라 보정값 (픽셀)
+        self.lateral_bias_2 = -0   # 후방 카메라 보정값 (픽셀)
 
         # --- [Algorithm Parameters] ---
         self.min_target_points = 3      # 경로 계획을 시작할 최소 타겟 점 개수
@@ -54,13 +62,13 @@ class PathPlannerNode(Node):
 
     def lane_1_callback(self, msg: LaneInfo):
         self.generate_and_publish_path(
-            msg.target_points, self.cfg.car_center_x_1, self.publisher_1, cam_id="1")
+            msg.target_points, self.cfg.car_center_x_1, self.cfg.lateral_bias_1, self.publisher_1, cam_id="1")
 
     def lane_2_callback(self, msg: LaneInfo):
         self.generate_and_publish_path(
-            msg.target_points, self.cfg.car_center_x_2, self.publisher_2, cam_id="2")
+            msg.target_points, self.cfg.car_center_x_2, self.cfg.lateral_bias_2, self.publisher_2, cam_id="2")
 
-    def generate_and_publish_path(self, target_points, car_center_x, publisher, cam_id="?"):
+    def generate_and_publish_path(self, target_points, car_center_x, lateral_bias, publisher, cam_id="?"):
 
         if len(target_points) < self.cfg.min_target_points:
             self.get_logger().warn("타겟 지점이 부족해서 경로를 만들 수 없습니다.")
@@ -70,11 +78,10 @@ class PathPlannerNode(Node):
         y_points = [tp.target_y for tp in target_points]
 
         # ── car_center y 자동 계산 ───────────────────────────
-        # target y 최댓값 + 여유값 → 항상 스플라인 범위 안쪽 끝점으로 연결됨
         auto_car_center_y = max(y_points) + self.cfg.car_center_y_margin
         self.get_logger().info(
             f"[cam{cam_id}] target y: {min(y_points)}~{max(y_points)}, "
-            f"car_center: ({car_center_x}, {auto_car_center_y})"
+            f"car_center: ({car_center_x}, {auto_car_center_y}), lateral_bias: {lateral_bias}"
         )
         # ─────────────────────────────────────────────────────
 
@@ -99,10 +106,14 @@ class PathPlannerNode(Node):
 
         y_points, x_points = zip(*deduped)
 
-        # 스플라인 보간
+        # 스플라인 보간 (차선 중앙 기준으로 정상 생성)
         cs = CubicSpline(y_points, x_points, bc_type='natural')
         y_new = np.linspace(min(y_points), max(y_points), self.cfg.spline_resolution)
         x_new = cs(y_new)
+
+        # 경로 전체를 lateral_bias만큼 평행이동
+        # 기울기(곡률)는 그대로 유지되고 위치만 이동됨
+        x_new = x_new + lateral_bias
 
         path_msg = PathPlanningResult()
         path_msg.x_points = list(x_new)

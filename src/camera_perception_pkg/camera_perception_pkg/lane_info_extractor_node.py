@@ -56,6 +56,13 @@ class Yolov8InfoExtractor(Node):
         self.last_lane_width_1 = 338  # 마지막으로 측정된 차선 폭 (초기값: 실측 후 교체 권장)
         self.last_lane_width_2 = 330
 
+        # 마지막으로 정상 검출된 각 차선의 x0 저장
+        # 점선이 가려질 때 last_lane_width 추정 대신 이 값을 사용 → 더 안정적
+        self.last_line_x0_1 = None
+        self.last_dotted_x0_1 = None
+        self.last_line_x0_2 = None
+        self.last_dotted_x0_2 = None
+
 
     def _fit_line_in_roi(self, roi_image, line_type_name):
         """
@@ -321,8 +328,16 @@ class Yolov8InfoExtractor(Node):
                 if 150 < measured_width < 600:
                     if callback_id == "1":
                         self.last_lane_width_1 = measured_width
+                        self.last_line_x0_1 = fitted_results['line'][0][2]
+                        self.last_dotted_x0_1 = fitted_results['dotted_line'][0][2]
+                        self.get_logger().info(
+                            f"[1] x0 저장: line={self.last_line_x0_1:.1f}, dotted={self.last_dotted_x0_1:.1f}")
                     else:
                         self.last_lane_width_2 = measured_width
+                        self.last_line_x0_2 = fitted_results['line'][0][2]
+                        self.last_dotted_x0_2 = fitted_results['dotted_line'][0][2]
+                        self.get_logger().info(
+                            f"[2] x0 저장: line={self.last_line_x0_2:.1f}, dotted={self.last_dotted_x0_2:.1f}")
 
         if len(fitted_results) == 1:
             existing_type = list(fitted_results.keys())[0]
@@ -332,14 +347,20 @@ class Yolov8InfoExtractor(Node):
 
             if callback_id == "1":
                 # Camera 1: line=왼쪽, dotted=오른쪽
-                # line만 보이면 → 오른쪽에 dotted 예측: x0 + lane_width
-                # dotted만 보이면 → 왼쪽에 line 예측: x0 - lane_width
-                x0_new = x0 + lane_width if existing_type == 'line' else x0 - lane_width
+                if existing_type == 'line':
+                    # 점선이 안 보임 → 마지막으로 본 점선 위치 사용 (없으면 폭으로 추정)
+                    x0_new = self.last_dotted_x0_1 if self.last_dotted_x0_1 is not None else x0 + lane_width
+                else:
+                    # 실선이 안 보임 → 마지막으로 본 실선 위치 사용
+                    x0_new = self.last_line_x0_1 if self.last_line_x0_1 is not None else x0 - lane_width
             elif callback_id == "2":
                 # Camera 2: dotted=왼쪽, line=오른쪽
-                # dotted만 보이면 → 오른쪽에 line 예측: x0 + lane_width
-                # line만 보이면 → 왼쪽에 dotted 예측: x0 - lane_width
-                x0_new = x0 + lane_width if existing_type == 'dotted_line' else x0 - lane_width
+                if existing_type == 'dotted_line':
+                    # 실선이 안 보임 → 마지막으로 본 실선 위치 사용
+                    x0_new = self.last_line_x0_2 if self.last_line_x0_2 is not None else x0 + lane_width
+                else:
+                    # 점선이 안 보임 → 마지막으로 본 점선 위치 사용
+                    x0_new = self.last_dotted_x0_2 if self.last_dotted_x0_2 is not None else x0 - lane_width
             else:
                 x0_new = x0  # fallback
 

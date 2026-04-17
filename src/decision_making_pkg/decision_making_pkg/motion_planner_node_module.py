@@ -15,8 +15,8 @@ class MotionPlannerConfig:
 
         # --- [Time & Mode] ---
         self.timer_period = 0.1              # 모션 제어 주기 (초)
-        self.forward_cycle_duration = 14   # 전진 시간 (초)
-        self.backward_cycle_duration = 14  # 후진 시간 (초)
+        self.forward_cycle_duration = 14.5   # 전진 시간 (초)
+        self.backward_cycle_duration = 14.5  # 후진 시간 (초)
 
         # --- [Speed & Accel] ---
         self.forward_speed = 100        # 전진 목표 속도
@@ -30,7 +30,7 @@ class MotionPlannerConfig:
         self.max_angle_backward = 50    # 후진 시 최대 조향각
 
         # --- [Calculation Indices] ---
-        self.lookahead_index_near = -50
+        self.lookahead_index_near = -40
         self.lookahead_index_far = -1
 # ==========================================
 
